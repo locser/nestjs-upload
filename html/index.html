@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload File System</title>
+    <!-- Thêm thư viện axios để xử lý HTTP requests -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+      }
+      .status {
+        margin-top: 20px;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      .file-info {
+        margin-top: 5px;
+        font-size: 0.9em;
+        color: #6c757d;
+      }
+      .progress-container {
+        width: 100%;
+        background-color: #f1f1f1;
+        border-radius: 5px;
+        margin-top: 10px;
+        display: none;
+      }
+      .progress-bar {
+        height: 20px;
+        background-color: #4caf50;
+        border-radius: 5px;
+        width: 0%;
+        text-align: center;
+        line-height: 20px;
+        color: white;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      input[type='text'],
+      input[type='file'] {
+        width: 100%;
+        padding: 8px;
+        margin: 5px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hệ Thống Tải Lên Tệp</h1>
+    <form id="uploadForm">
+      <div>
+        <label for="file">
+          Chọn Tệp (Chỉ hình ảnh: jpg, jpeg, png, gif):
+        </label>
+        <input
+          type="file"
+          id="file"
+          name="file"
+          accept="image/*"
+          required
+          multiple
+        />
+        <div id="fileInfo" class="file-info"></div>
+      </div>
+      <div style="margin-top: 10px">
+        <label for="name">Tên:</label>
+        <input
+          type="text"
+          id="name"
+          name="name"
+          defaultValue=""
+          placeholder="Nhập tên cho tệp"
+        />
+      </div>
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar">0%</div>
+      </div>
+      <div style="margin-top: 10px">
+        <button type="submit">Tải Lên</button>
+      </div>
+    </form>
+    <div id="status" style="display: none" class="status"></div>
+  </body>
+</html>
+
+<script>
+  /**
+   * Hệ thống tải lên tệp với chức năng chia nhỏ
+   *
+   * Mô tả:
+   * - Hệ thống cho phép người dùng tải lên tệp hình ảnh
+   * - Tệp được chia thành các phần nhỏ (chunks) để tải lên server
+   * - Sử dụng Promise.all để xử lý đồng thời các phần nhỏ
+   * - Hiển thị trạng thái tải lên và thông báo kết quả
+   *
+   * Tính năng:
+   * - Chọn nhiều tệp (hiện tại chỉ xử lý tệp đầu tiên)
+   * - Hiển thị kích thước tệp
+   * - Chia nhỏ tệp thành các phần để tải lên
+   * - Hiển thị thanh tiến trình
+   * - Giữ nguyên trạng thái trang sau khi tải lên
+   */
+
+  // Lấy tham chiếu đến các phần tử DOM
+  const form = document.getElementById('uploadForm');
+  const statusDiv = document.getElementById('status');
+  const fileInput = document.querySelector('input[type="file"]');
+  const fileInfo = document.getElementById('fileInfo');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressBar = document.getElementById('progressBar');
+
+  /**
+   * Hiển thị thông tin kích thước tệp khi người dùng chọn tệp
+   * Chuyển đổi kích thước từ byte sang KB hoặc MB tùy thuộc vào kích thước
+   */
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      fileInfo.innerHTML = Array.from(fileInput.files)
+        .map((file) => {
+          const fileSizeKB = Math.round(file.size / 1024);
+          const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+          return `Tệp: ${file.name} | Kích thước: ${
+            fileSizeKB < 1024 ? fileSizeKB + ' KB' : fileSizeMB + ' MB'
+          }`;
+        })
+        .join('<br>');
+    } else {
+      fileInfo.innerHTML = '';
+    }
+  });
+
+  /**
+   * Xử lý sự kiện khi người dùng gửi biểu mẫu
+   * Ngăn chặn hành vi mặc định của trình duyệt (tải lại trang)
+   * Chia tệp thành các phần nhỏ và tải lên server
+   */
+  form.addEventListener('submit', async (e) => {
+    // Ngăn chặn hành vi mặc định của form để tránh tải lại trang
+    e.preventDefault();
+
+    // Hiển thị thông báo đang tải lên
+    statusDiv.className = 'status';
+    statusDiv.textContent = 'Đang tải lên...';
+    statusDiv.style.display = 'block';
+
+    // Hiển thị thanh tiến trình
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+
+    const nameInput = document.querySelector('input[type="text"]');
+    const name = nameInput.value;
+
+    if (!fileInput.files.length) {
+      statusDiv.className = 'status error';
+      statusDiv.textContent = 'Vui lòng chọn một tệp';
+      progressContainer.style.display = 'none';
+      return;
+    }
+
+    // Theo dõi tiến trình tải lên
+    let totalFilesUploaded = 0;
+    const totalFiles = fileInput.files.length;
+    const chunkSize = 1024 * 100; // Tăng kích thước chunk lên 100KB để tải nhanh hơn
+
+    try {
+      // Hiện tại chỉ xử lý tệp đầu tiên
+      // TODO: Cải thiện để xử lý nhiều tệp
+      const file = fileInput.files[0];
+      let fileName = file.name;
+      const extName = '.' + file.type.split('/')[1];
+
+      // Tạo tên tệp an toàn, thêm timestamp để tránh trùng lặp
+      fileName = `${name}_${fileName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+
+      const totalChunks = Math.ceil(file.size / chunkSize);
+      const chunkPromises = [];
+
+      if (totalChunks == 1) {
+        // call api upload file
+        const formData = new FormData();
+        // formData.append('name', fileName);
+        formData.append('file', file, fileName + extName);
+
+        await axios.post('http://localhost:3000/upload/file', formData);
+        progressBar.style.width = `${100}%`;
+        progressBar.textContent = `${100}%`;
+        return;
+      } else {
+        // Tạo và tải lên từng phần nhỏ của tệp
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * chunkSize;
+          const end = Math.min(start + chunkSize, file.size);
+          const chunk = file.slice(start, end);
+
+          const formData = new FormData();
+          formData.append('name_file', `${fileName}`);
+          formData.append('file', chunk, `chunk_${i}`);
+          formData.append('total_chunks', totalChunks);
+          formData.append('chunk_index', i);
+
+          const chunkPromise = axios
+            .post('http://localhost:3000/upload/large-files', formData)
+            .then((response) => {
+              // Cập nhật thanh tiến trình sau mỗi chunk được tải lên
+              const progress = Math.round(((i + 1) / totalChunks) * 100);
+              progressBar.style.width = `${progress}%`;
+              progressBar.textContent = `${progress}%`;
+              return response;
+            });
+
+          chunkPromises.push(chunkPromise);
+        }
+
+        // Đợi tất cả các phần nhỏ được tải lên
+        await Promise.all(chunkPromises);
+        totalFilesUploaded++;
+      }
+
+      // Hiển thị thông báo thành công
+      statusDiv.className = 'status success';
+      statusDiv.textContent = `Đã tải lên và xử lý thành công ${totalFilesUploaded} tệp!`;
+
+      // Ẩn thanh tiến trình sau khi hoàn thành
+      setTimeout(() => {
+        progressContainer.style.display = 'none';
+      }, 2000);
+    } catch (err) {
+      console.error('Lỗi:', err);
+      statusDiv.className = 'status error';
+      statusDiv.textContent = `Lỗi: ${err.response?.data?.message || err.message}. Kiểm tra console để biết chi tiết.`;
+      progressContainer.style.display = 'none';
+    }
+
+    // Trả về false để đảm bảo form không được gửi theo cách truyền thống
+    return false;
+  });
+</script>
