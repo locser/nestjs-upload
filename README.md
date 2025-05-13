@@ -2,72 +2,130 @@
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
+<p align="center">
+  <b>NestJS File Upload System</b> - A robust file upload system with chunking functionality
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+A robust file upload system built with NestJS that supports both single file uploads and large file uploads with chunking functionality.
+
+## Features
+
+- **Single File Upload**: Direct upload of small files to the server
+- **Large File Upload with Chunking**: Split large files into smaller chunks for efficient uploading
+- **Client-side Chunk Management**: JavaScript implementation for splitting files into chunks
+- **Server-side Chunk Storage**: Store chunks in dedicated folders based on upload ID
+- **Chunk Merging**: Combine uploaded chunks into a complete file
+- **Progress Tracking**: Real-time upload progress visualization
+- **Conflict Prevention**: Unique upload IDs to prevent naming conflicts
+- **Folder Cleanup**: Automatic cleanup after successful merging
+
+## Technology Stack
+
+- **Backend**: NestJS (Node.js framework)
+- **File Handling**: Multer for file uploads
+- **Frontend**: HTML, CSS, JavaScript
+- **HTTP Client**: Axios for making API requests
 
 ## Installation
 
 ```bash
+# Install dependencies
 $ npm install
 ```
 
-## Running the app
+## Running the Application
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
+# Development mode
 $ npm run start:dev
 
-# production mode
+# Production mode
 $ npm run start:prod
 ```
 
-## Test
+## API Endpoints
 
-```bash
-# unit tests
-$ npm run test
+### Single File Upload
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```
+POST /upload/file
 ```
 
-## Support
+Uploads a single file directly to the server. Suitable for small files.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Large File Upload (Chunking)
 
-## Stay in touch
+```
+POST /upload/large-files
+```
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Uploads a chunk of a large file. Requires the following parameters:
+
+- `file`: The chunk data
+- `name_file`: Original file name
+- `chunk_index`: Index of the current chunk
+- `total_chunks`: Total number of chunks
+- `upload_id`: Unique identifier for the upload (generated by client)
+
+### Merge Chunks
+
+```
+POST /upload/large-files/merge
+```
+
+Merges all uploaded chunks into a complete file. Requires:
+
+- `upload_id`: The unique identifier for the upload
+
+## Client Implementation
+
+The project includes two HTML examples demonstrating how to use the API:
+
+1. `html/index.html`: Basic implementation with progress tracking
+2. `html/test-upload.html`: More advanced implementation with separate sections for single and chunked uploads
+
+### Chunking Process
+
+1. Client generates a unique `upload_id` using timestamp and filename
+2. File is split into chunks of configurable size (default: 100KB)
+3. Each chunk is uploaded with metadata (chunk index, total chunks, etc.)
+4. Server stores chunks in a folder named with the `upload_id`
+5. After all chunks are uploaded, client can request merging
+6. Server combines chunks into a complete file and cleans up the chunk folder
+
+## Configuration
+
+Key configuration options can be found in:
+
+- `src/oss.ts`: Storage configuration and file naming
+- `src/app.controller.ts`: API endpoints and Multer options
+- `src/file-upload.service.ts`: Chunk handling and merging logic
+
+Default chunk size is set to 100KB in the client implementation, but can be adjusted based on your needs.
+
+## File Size Limits
+
+- Single file upload: 20MB (configurable)
+- Chunked upload: 1000MB total (configurable)
+- Maximum number of files: 100 (configurable)
+
+## Error Handling
+
+The system includes comprehensive error handling for:
+
+- Missing files
+- Invalid upload IDs
+- Missing chunks
+- File type validation (configurable)
+
+## Security Considerations
+
+- File type validation to prevent uploading of malicious files
+- Size limits to prevent denial of service attacks
+- Unique folder names to prevent overwriting existing files
 
 ## License
 
-Nest is [MIT licensed](LICENSE).
+This project is licensed under the UNLICENSED license.
