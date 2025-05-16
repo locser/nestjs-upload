@@ -11,6 +11,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { AppService } from './app.service';
 import { FileUploadService } from './file-upload.service';
+import { LoggerService, LogLevel } from './logger';
 import { storage, URL_LOCALE } from './oss';
 
 /**
@@ -40,10 +41,15 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private readonly fileUploadService: FileUploadService,
-  ) {}
+    private readonly logger: LoggerService,
+  ) {
+    // Thiết lập context cho logger (tùy chọn, logger sẽ tự động phát hiện nếu không được thiết lập)
+    this.logger.setContext('AppController');
+  }
 
   @Get()
   getHello(): string {
+    this.logger.application(LogLevel.INFO, 'Endpoint getHello() được gọi');
     return this.appService.getHello();
   }
 
@@ -75,8 +81,12 @@ export class AppController {
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
   ) {
-    console.log('File uploaded:', file ? file.originalname : 'No file');
-    console.log('Body:', body);
+    this.logger.application(
+      LogLevel.INFO,
+      `Tải lên tệp đơn lẻ: ${file ? file.originalname : 'Không có tệp'}`,
+      null,
+      { fileSize: file?.size, body },
+    );
 
     return {
       success: true,
@@ -102,10 +112,20 @@ export class AppController {
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
   ) {
-    console.log('File chunk received:', file ? file.originalname : 'No file');
-    console.log('Body received:', body);
+    this.logger.application(
+      LogLevel.INFO,
+      `Nhận phần tệp: ${file ? file.originalname : 'Không có tệp'}`,
+      null,
+      {
+        fileSize: file?.size,
+        chunkIndex: body.chunk_index,
+        totalChunks: body.total_chunks,
+        uploadId: body.upload_id,
+      },
+    );
 
     if (!file) {
+      this.logger.application(LogLevel.ERROR, 'Không có tệp được tải lên');
       throw new BadRequestException('No file uploaded');
     }
 
@@ -121,14 +141,28 @@ export class AppController {
    */
   @Post('/upload/large-files/merge')
   async mergeLargeFile(@Body() body: { upload_id: string }) {
-    console.log('Merge file with upload ID:', body.upload_id);
+    this.logger.application(
+      LogLevel.INFO,
+      `Bắt đầu hợp nhất tệp với upload ID: ${body.upload_id}`,
+    );
 
     if (!body.upload_id) {
+      this.logger.application(
+        LogLevel.ERROR,
+        'Không có upload ID được cung cấp',
+      );
       throw new BadRequestException('Upload ID is required');
     }
 
     // Hợp nhất các phần tệp
     const result = await this.fileUploadService.mergeChunks(body.upload_id);
+
+    this.logger.application(
+      LogLevel.INFO,
+      `Hợp nhất tệp thành công với upload ID: ${body.upload_id}`,
+      null,
+      { filePath: result.filePath },
+    );
 
     return result;
   }
