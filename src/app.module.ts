@@ -1,10 +1,7 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { TypeOrmConfigService } from './database/typeorm.config';
-import { ExcelsModule } from './excels/excels.module';
-import { FileUploadService } from './file-upload.service';
+import { FileUploadModule } from './file-upload/file-upload.module';
 import { LoggerModule } from './logger';
 import { LogLevel } from './logger/logger.constants';
 
@@ -18,10 +15,11 @@ import { LogLevel } from './logger/logger.constants';
       maxFileSize: 10 * 1024 * 1024, // 10MB
       maxFiles: 5,
     }),
-    TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
-    ExcelsModule,
+    // TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
+    // ExcelsModule,
+    FileUploadModule,
   ],
   controllers: [AppController],
-  providers: [AppService, FileUploadService],
+  providers: [AppService],
 })
 export class AppModule {}

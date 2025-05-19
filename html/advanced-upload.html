@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tải Lên Tệp Nâng Cao</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1,
+      h2 {
+        color: #333;
+      }
+      .upload-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .progress-container {
+        width: 100%;
+        height: 20px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+        margin-top: 10px;
+        display: none;
+      }
+      .progress-bar {
+        height: 100%;
+        background-color: #4caf50;
+        border-radius: 5px;
+        text-align: center;
+        line-height: 20px;
+        color: white;
+        width: 0%;
+      }
+      .status {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+      }
+      .success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      .error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      button {
+        padding: 8px 16px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      input[type='file'],
+      input[type='text'] {
+        margin-bottom: 10px;
+      }
+      .nav-links {
+        margin-bottom: 20px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+      }
+      .nav-links a {
+        margin-right: 15px;
+        color: #007bff;
+        text-decoration: none;
+      }
+      .nav-links a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hệ Thống Tải Lên Tệp Nâng Cao</h1>
+
+    <div class="nav-links">
+      <a href="test-upload.html">Quay lại trang tải lên cơ bản</a>
+      <a href="index.html">Trang chủ</a>
+    </div>
+
+    <!-- Phần tải lên tệp lớn (Phương pháp cải tiến) -->
+    <div class="upload-section">
+      <h2>Tải Lên Tệp Lớn (Phương Pháp Cải Tiến)</h2>
+      <p>
+        Chia file thành các phần lớn, mỗi phần gửi nhiều chunk trong một request
+      </p>
+      <form id="advancedUploadForm" onsubmit="return false;">
+        <div>
+          <label for="advancedFile">Chọn Tệp:</label>
+          <input type="file" id="advancedFile" name="file" required />
+        </div>
+        <div>
+          <label for="advancedName">Tên:</label>
+          <input
+            type="text"
+            id="advancedName"
+            name="name"
+            placeholder="Nhập tên cho tệp"
+          />
+        </div>
+        <div class="progress-container" id="advancedProgressContainer">
+          <div class="progress-bar" id="advancedProgressBar">0%</div>
+        </div>
+        <div
+          class="progress-container"
+          id="advancedPartProgressContainer"
+          style="margin-top: 5px; height: 10px"
+        >
+          <div class="progress-bar" id="advancedPartProgressBar">0%</div>
+        </div>
+        <div
+          style="margin-top: 10px; font-size: 0.9em; color: #666"
+          id="advancedProgressInfo"
+        >
+          Sẵn sàng để tải lên
+        </div>
+        <button type="button" id="advancedUploadBtn">Tải Lên</button>
+      </form>
+      <div id="advancedStatus" class="status"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+      // Cấu hình
+      const API_URL = 'http://localhost:3000';
+      const ADVANCED_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB mỗi chunk cho phương pháp cải tiến
+      const MAX_CHUNKS_PER_REQUEST = 50; // Tối đa 50 chunk trong một request
+
+      // Xử lý tải lên tệp lớn (Phương pháp cải tiến)
+      const advancedUploadForm = document.getElementById('advancedUploadForm');
+      const advancedFileInput = document.getElementById('advancedFile');
+      const advancedNameInput = document.getElementById('advancedName');
+      const advancedProgressContainer = document.getElementById(
+        'advancedProgressContainer',
+      );
+      const advancedProgressBar = document.getElementById(
+        'advancedProgressBar',
+      );
+      const advancedPartProgressContainer = document.getElementById(
+        'advancedPartProgressContainer',
+      );
+      const advancedPartProgressBar = document.getElementById(
+        'advancedPartProgressBar',
+      );
+      const advancedProgressInfo = document.getElementById(
+        'advancedProgressInfo',
+      );
+      const advancedStatus = document.getElementById('advancedStatus');
+
+      // Xử lý sự kiện click nút tải lên cho phương pháp cải tiến
+      document
+        .getElementById('advancedUploadBtn')
+        .addEventListener('click', async () => {
+          if (!advancedFileInput.files.length) {
+            showStatus(advancedStatus, 'Vui lòng chọn một tệp', 'error');
+            return;
+          }
+
+          const file = advancedFileInput.files[0];
+          const extName = '.' + file.type.split('/')[1];
+
+          const fileName =
+            advancedNameInput.value?.length > 0
+              ? advancedNameInput.value + extName
+              : file.name.replace(/[^\p{L}0-9_.]/gu, '_');
+
+          showStatus(advancedStatus, 'Đang chuẩn bị tải lên...', '');
+          advancedProgressContainer.style.display = 'block';
+          advancedPartProgressContainer.style.display = 'block';
+          advancedProgressBar.style.width = '0%';
+          advancedProgressBar.textContent = '0%';
+          advancedPartProgressBar.style.width = '0%';
+          advancedPartProgressBar.textContent = '0%';
+
+          try {
+            // Tạo một upload_id duy nhất
+            const uploadId = Date.now().toString() + '_' + fileName;
+            console.log('Generated uploadId:', uploadId);
+
+            // Tính toán số lượng chunk và phần
+            const fileSize = file.size;
+            const totalChunks = Math.ceil(fileSize / ADVANCED_CHUNK_SIZE);
+            const chunksPerPart = MAX_CHUNKS_PER_REQUEST;
+            const totalParts = Math.ceil(totalChunks / chunksPerPart);
+
+            advancedProgressInfo.textContent = `Tệp: ${fileName} | Kích thước: ${formatFileSize(fileSize)} | Tổng số phần: ${totalParts} | Tổng số chunk: ${totalChunks}`;
+
+            // Tạo mảng các Promise để tải lên tất cả các phần đồng thời
+            advancedProgressInfo.textContent = `Đang chuẩn bị tải lên ${totalParts} phần...`;
+
+            // Tạo mảng các chỉ số phần từ 0 đến totalParts-1
+            const partIndices = Array.from({ length: totalParts }, (_, i) => i);
+
+            // Tạo mảng các Promise cho mỗi phần
+            const uploadPromises = partIndices.map(async (partIndex) => {
+              // Tính toán số lượng chunk trong phần này
+              const startChunkIndex = partIndex * chunksPerPart;
+              const endChunkIndex = Math.min(
+                (partIndex + 1) * chunksPerPart,
+                totalChunks,
+              );
+              const chunksInThisPart = endChunkIndex - startChunkIndex;
+
+              // Chuẩn bị FormData cho phần này
+              const formData = new FormData();
+
+              // Thêm thông tin về phần
+              formData.append('upload_id', uploadId);
+              formData.append('name_file', fileName);
+              formData.append('part_index', partIndex);
+              formData.append('total_parts', totalParts);
+              formData.append('chunk_start_index', startChunkIndex);
+
+              // Thêm các chunk vào FormData sử dụng map thay vì for
+              Array.from({ length: chunksInThisPart }).forEach((_, i) => {
+                const chunkIndex = startChunkIndex + i;
+                const start = chunkIndex * ADVANCED_CHUNK_SIZE;
+                const end = Math.min(start + ADVANCED_CHUNK_SIZE, fileSize);
+                const chunk = file.slice(start, end);
+
+                // Thêm chunk vào FormData với tên trường 'chunks', đánh số từ 1 thay vì 0
+                formData.append('chunks', chunk, `chunk_${chunkIndex + 1}`);
+              });
+
+              // Cập nhật thông tin trước khi tải lên phần này
+              console.log(
+                `Bắt đầu tải lên phần ${partIndex + 1}/${totalParts} (${chunksInThisPart} chunks)`,
+              );
+
+              // Tải lên phần này và trả về Promise
+              return axios
+                .post(`${API_URL}/file-upload/upload/large-files/2`, formData, {
+                  onUploadProgress: (progressEvent) => {
+                    // Cập nhật thanh tiến trình cho phần hiện tại
+                    const percentCompleted = Math.round(
+                      (progressEvent.loaded * 100) / progressEvent.total,
+                    );
+
+                    // Hiển thị thông tin về phần đang tải lên
+                    advancedProgressInfo.textContent = `Đang tải lên phần ${partIndex + 1}/${totalParts} (${chunksInThisPart} chunks): ${percentCompleted}%`;
+
+                    // Cập nhật thanh tiến trình phần
+                    advancedPartProgressBar.style.width = `${percentCompleted}%`;
+                    advancedPartProgressBar.textContent = `${percentCompleted}%`;
+
+                    // Cập nhật thanh tiến trình tổng thể dựa trên tiến độ của tất cả các phần
+                    // Mỗi phần đóng góp 1/totalParts vào tiến độ tổng thể
+                    const partContribution =
+                      (1 / totalParts) *
+                      (progressEvent.loaded / progressEvent.total);
+                    const overallProgress = Math.round(
+                      (partIndex / totalParts + partContribution) * 100,
+                    );
+                    advancedProgressBar.style.width = `${overallProgress}%`;
+                    advancedProgressBar.textContent = `${overallProgress}%`;
+                  },
+                })
+                .then((response) => {
+                  console.log(
+                    `Hoàn thành tải lên phần ${partIndex + 1}/${totalParts}`,
+                  );
+                  return { partIndex, response };
+                });
+            });
+
+            // Sử dụng Promise.all để đợi tất cả các phần tải lên hoàn tất
+            await Promise.all(uploadPromises);
+
+            // Cập nhật thanh tiến trình tổng thể khi tất cả các phần đã được tải lên
+            advancedProgressBar.style.width = '100%';
+            advancedProgressBar.textContent = '100%';
+
+            // Tất cả các phần đã được tải lên, gửi yêu cầu hợp nhất
+            advancedProgressInfo.textContent = 'Đang hợp nhất các phần...';
+
+            // try {
+            //   // Gọi API hợp nhất các phần
+            //   const mergeResponse = await axios.post(
+            //     `${API_URL}/file-upload/upload/large-files/merge`,
+            //     {
+            //       upload_id: uploadId,
+            //     },
+            //   );
+
+            //   console.log('Merge response:', mergeResponse.data);
+            //   advancedProgressInfo.textContent = 'Hoàn tất!';
+            //   showStatus(
+            //     advancedStatus,
+            //     'Tải lên và hợp nhất thành công!',
+            //     'success',
+            //   );
+            // } catch (mergeError) {
+            //   console.error('Lỗi khi hợp nhất:', mergeError);
+            //   advancedProgressInfo.textContent =
+            //     'Tải lên thành công nhưng không thể hợp nhất!';
+            //   showStatus(
+            //     advancedStatus,
+            //     `Tải lên thành công nhưng không thể hợp nhất: ${mergeError.response?.data?.message || mergeError.message}`,
+            //     'error',
+            //   );
+            // }
+          } catch (error) {
+            advancedProgressInfo.textContent = 'Đã xảy ra lỗi!';
+            showStatus(
+              advancedStatus,
+              `Lỗi: ${error.response?.data?.message || error.message}`,
+              'error',
+            );
+            console.error('Error:', error);
+            // Đảm bảo không reload trang khi có lỗi
+            return false;
+          }
+        });
+
+      // Hàm hiển thị trạng thái
+      function showStatus(element, message, type) {
+        element.textContent = message;
+        element.className = 'status';
+        if (type) {
+          element.classList.add(type);
+        }
+        element.style.display = 'block';
+      }
+
+      // Hàm định dạng kích thước file
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      // Ngăn chặn tất cả các form submit để tránh reload trang
+      document.querySelectorAll('form').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+          console.log('Form submission prevented');
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+
+        // Thêm sự kiện bắt lỗi cho form
+        form.addEventListener('error', (e) => {
+          console.log('Form error caught');
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+      });
+
+      // Bắt sự kiện trước khi trang unload để ngăn chặn reload
+      window.addEventListener('beforeunload', function (e) {
+        // Chỉ ngăn chặn khi đang trong quá trình upload
+        const uploading = document.querySelector(
+          '.progress-container[style*="display: block"]',
+        );
+        if (uploading) {
+          e.preventDefault();
+          e.returnValue = '';
+          return false;
+        }
+      });
+    </script>
+  </body>
+</html>

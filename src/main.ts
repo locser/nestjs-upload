@@ -61,7 +61,7 @@ async function bootstrap() {
   server.headersTimeout = 5000;
 
   // Khởi động server
-  const PORT = 3003;
+  const PORT = 3000;
   await app.listen(PORT);
 
   // Ghi log khi server đã khởi động

@@ -74,10 +74,29 @@
   <body>
     <h1>Hệ Thống Tải Lên Tệp</h1>
 
+    <div
+      class="nav-links"
+      style="
+        margin-bottom: 20px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+      "
+    >
+      <a
+        href="advanced-upload.html"
+        style="margin-right: 15px; color: #007bff; text-decoration: none"
+        >Đến trang tải lên nâng cao</a
+      >
+      <a href="index.html" style="color: #007bff; text-decoration: none"
+        >Trang chủ</a
+      >
+    </div>
+
     <!-- Phần tải lên tệp đơn lẻ -->
     <div class="upload-section">
       <h2>Tải Lên Tệp Đơn Lẻ</h2>
-      <form id="singleUploadForm">
+      <form id="singleUploadForm" onsubmit="return false;">
         <div>
           <label for="singleFile">Chọn Tệp:</label>
           <input type="file" id="singleFile" name="file" required />
@@ -94,7 +113,7 @@
         <div class="progress-container" id="singleProgressContainer">
           <div class="progress-bar" id="singleProgressBar">0%</div>
         </div>
-        <button type="submit">Tải Lên</button>
+        <button type="button" id="singleUploadBtn">Tải Lên</button>
       </form>
       <div id="singleStatus" class="status"></div>
     </div>
@@ -102,7 +121,7 @@
     <!-- Phần tải lên tệp lớn -->
     <div class="upload-section">
       <h2>Tải Lên Tệp Lớn (Chia Nhỏ)</h2>
-      <form id="chunkUploadForm">
+      <form id="chunkUploadForm" onsubmit="return false;">
         <div>
           <label for="chunkFile">Chọn Tệp:</label>
           <input type="file" id="chunkFile" name="file" required />
@@ -119,7 +138,7 @@
         <div class="progress-container" id="chunkProgressContainer">
           <div class="progress-bar" id="chunkProgressBar">0%</div>
         </div>
-        <button type="submit">Tải Lên</button>
+        <button type="button" id="chunkUploadBtn">Tải Lên</button>
       </form>
       <div id="chunkStatus" class="status"></div>
     </div>
@@ -128,7 +147,7 @@
     <script>
       // Cấu hình
       const API_URL = 'http://localhost:3000';
-      const CHUNK_SIZE = 1024 * 1024; // 1mb mỗi phần
+      const CHUNK_SIZE = 1024 * 1024; // 1MB mỗi phần
 
       // Xử lý tải lên tệp đơn lẻ
       const singleUploadForm = document.getElementById('singleUploadForm');
@@ -140,48 +159,49 @@
       const singleProgressBar = document.getElementById('singleProgressBar');
       const singleStatus = document.getElementById('singleStatus');
 
-      singleUploadForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+      // Xử lý sự kiện click nút tải lên cho tệp đơn lẻ
+      document
+        .getElementById('singleUploadBtn')
+        .addEventListener('click', async () => {
+          if (!singleFileInput.files.length) {
+            showStatus(singleStatus, 'Vui lòng chọn một tệp', 'error');
+            return;
+          }
 
-        if (!singleFileInput.files.length) {
-          showStatus(singleStatus, 'Vui lòng chọn một tệp', 'error');
-          return;
-        }
+          const file = singleFileInput.files[0];
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('name', singleNameInput.value || '');
 
-        const file = singleFileInput.files[0];
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('name', singleNameInput.value || '');
+          showStatus(singleStatus, 'Đang tải lên...', '');
+          singleProgressContainer.style.display = 'block';
 
-        showStatus(singleStatus, 'Đang tải lên...', '');
-        singleProgressContainer.style.display = 'block';
-
-        try {
-          const response = await axios.post(
-            `${API_URL}/upload/file`,
-            formData,
-            {
-              onUploadProgress: (progressEvent) => {
-                const percentCompleted = Math.round(
-                  (progressEvent.loaded * 100) / progressEvent.total,
-                );
-                singleProgressBar.style.width = `${percentCompleted}%`;
-                singleProgressBar.textContent = `${percentCompleted}%`;
+          try {
+            const response = await axios.post(
+              `${API_URL}/upload/file`,
+              formData,
+              {
+                onUploadProgress: (progressEvent) => {
+                  const percentCompleted = Math.round(
+                    (progressEvent.loaded * 100) / progressEvent.total,
+                  );
+                  singleProgressBar.style.width = `${percentCompleted}%`;
+                  singleProgressBar.textContent = `${percentCompleted}%`;
+                },
               },
-            },
-          );
+            );
 
-          showStatus(singleStatus, 'Tải lên thành công!', 'success');
-          console.log('Response:', response.data);
-        } catch (error) {
-          showStatus(
-            singleStatus,
-            `Lỗi: ${error.response?.data?.message || error.message}`,
-            'error',
-          );
-          console.error('Error:', error);
-        }
-      });
+            showStatus(singleStatus, 'Tải lên thành công!', 'success');
+            console.log('Response:', response.data);
+          } catch (error) {
+            showStatus(
+              singleStatus,
+              `Lỗi: ${error.response?.data?.message || error.message}`,
+              'error',
+            );
+            console.error('Error:', error);
+          }
+        });
 
       // Xử lý tải lên tệp lớn
       const chunkUploadForm = document.getElementById('chunkUploadForm');
@@ -193,101 +213,105 @@
       const chunkProgressBar = document.getElementById('chunkProgressBar');
       const chunkStatus = document.getElementById('chunkStatus');
 
-      chunkUploadForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        if (!chunkFileInput.files.length) {
-          showStatus(chunkStatus, 'Vui lòng chọn một tệp', 'error');
-          return;
-        }
-
-        const file = chunkFileInput.files[0];
-        const fileName =
-          chunkNameInput.value || file.name.replace(/[^a-zA-Z0-9_.]/g, '_');
-
-        showStatus(chunkStatus, 'Đang tải lên...', '');
-        chunkProgressContainer.style.display = 'block';
-
-        try {
-          const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-          // Nếu tệp nhỏ, tải lên trực tiếp
-          if (totalChunks === 1) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('name', fileName);
-
-            await axios.post(`${API_URL}/upload/file`, formData, {
-              onUploadProgress: (progressEvent) => {
-                const percentCompleted = Math.round(
-                  (progressEvent.loaded * 100) / progressEvent.total,
-                );
-                chunkProgressBar.style.width = `${percentCompleted}%`;
-                chunkProgressBar.textContent = `${percentCompleted}%`;
-              },
-            });
-
-            showStatus(chunkStatus, 'Tải lên thành công!', 'success');
+      // Xử lý sự kiện click nút tải lên cho tệp lớn
+      document
+        .getElementById('chunkUploadBtn')
+        .addEventListener('click', async () => {
+          if (!chunkFileInput.files.length) {
+            showStatus(chunkStatus, 'Vui lòng chọn một tệp', 'error');
             return;
           }
 
-          // Tạo một upload_id duy nhất bằng cách kết hợp timestamp và tên file
-          const uploadId = Date.now().toString() + '_' + fileName;
-          console.log('Generated uploadId:', uploadId);
+          const file = chunkFileInput.files[0];
+          const fileName =
+            chunkNameInput.value || file.name.replace(/[^a-zA-Z0-9_.]/g, '_');
 
-          // Tải lên từng phần
-          const chunkPromises = Array.from({ length: totalChunks }, (_, i) => {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, file.size);
-            const chunk = file.slice(start, end);
+          showStatus(chunkStatus, 'Đang tải lên...', '');
+          chunkProgressContainer.style.display = 'block';
 
-            const formData = new FormData();
-            formData.append('file', chunk, `chunk_${i}`);
-            formData.append('name_file', fileName);
-            formData.append('chunk_index', i);
-            formData.append('total_chunks', totalChunks);
-            formData.append('upload_id', uploadId); // Thêm upload_id để tránh trùng lặp
+          try {
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-            return axios
-              .post(`${API_URL}/upload/large-files`, formData)
-              .then((response) => {
-                // Kiểm tra response từ server cho chunk đầu tiên
-                if (i === 0) {
-                  console.log('First chunk response:', response.data);
-                }
+            // Nếu tệp nhỏ, tải lên trực tiếp
+            if (totalChunks === 1) {
+              const formData = new FormData();
+              formData.append('file', file);
+              formData.append('name', fileName);
 
-                const percentCompleted = Math.round(
-                  ((i + 1) * 100) / totalChunks,
-                );
-                chunkProgressBar.style.width = `${percentCompleted}%`;
-                chunkProgressBar.textContent = `${percentCompleted}%`;
-
-                return response;
+              await axios.post(`${API_URL}/upload/file`, formData, {
+                onUploadProgress: (progressEvent) => {
+                  const percentCompleted = Math.round(
+                    (progressEvent.loaded * 100) / progressEvent.total,
+                  );
+                  chunkProgressBar.style.width = `${percentCompleted}%`;
+                  chunkProgressBar.textContent = `${percentCompleted}%`;
+                },
               });
-          });
 
-          await Promise.all(chunkPromises);
+              showStatus(chunkStatus, 'Tải lên thành công!', 'success');
+              return;
+            }
 
-          // Hợp nhất các phần (không được sử dụng trong ví dụ này)
-          // const mergeResponse = await axios.post(
-          //   `${API_URL}/upload/large-files/merge`,
-          //   {
-          //     name: fileName,
-          //     upload_id: uploadId,
-          //   },
-          // );
+            // Tạo một upload_id duy nhất bằng cách kết hợp timestamp và tên file
+            const uploadId = Date.now().toString() + '_' + fileName;
+            console.log('Generated uploadId:', uploadId);
 
-          // showStatus(chunkStatus, 'Tải lên và hợp nhất thành công!', 'success');
-          // console.log('Merge response:', mergeResponse.data);
-        } catch (error) {
-          showStatus(
-            chunkStatus,
-            `Lỗi: ${error.response?.data?.message || error.message}`,
-            'error',
-          );
-          console.error('Error:', error);
-        }
-      });
+            // Tải lên từng phần
+            const chunkPromises = Array.from(
+              { length: totalChunks },
+              (_, i) => {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+
+                const formData = new FormData();
+                formData.append('file', chunk, `chunk_${i}`);
+                formData.append('name_file', fileName);
+                formData.append('chunk_index', i);
+                formData.append('total_chunks', totalChunks);
+                formData.append('upload_id', uploadId); // Thêm upload_id để tránh trùng lặp
+
+                return axios
+                  .post(`${API_URL}/upload/large-files`, formData)
+                  .then((response) => {
+                    // Kiểm tra response từ server cho chunk đầu tiên
+                    if (i === 0) {
+                      console.log('First chunk response:', response.data);
+                    }
+
+                    const percentCompleted = Math.round(
+                      ((i + 1) * 100) / totalChunks,
+                    );
+                    chunkProgressBar.style.width = `${percentCompleted}%`;
+                    chunkProgressBar.textContent = `${percentCompleted}%`;
+
+                    return response;
+                  });
+              },
+            );
+
+            await Promise.all(chunkPromises);
+
+            // Hợp nhất các phần (không được sử dụng trong ví dụ này)
+            // const mergeResponse = await axios.post(
+            //   `${API_URL}/upload/large-files/merge`,
+            //   {
+            //     name: fileName,
+            //     upload_id: uploadId,
+            //   },
+            // );
+
+            // showStatus(chunkStatus, 'Tải lên và hợp nhất thành công!', 'success');
+            // console.log('Merge response:', mergeResponse.data);
+          } catch (error) {
+            showStatus(
+              chunkStatus,
+              `Lỗi: ${error.response?.data?.message || error.message}`,
+              'error',
+            );
+            console.error('Error:', error);
+          }
+        });
 
       // Hàm hiển thị trạng thái
       function showStatus(element, message, type) {
@@ -298,6 +322,46 @@
         }
         element.style.display = 'block';
       }
+
+      // Hàm định dạng kích thước file
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      // Ngăn chặn tất cả các form submit để tránh reload trang
+      document.querySelectorAll('form').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+          console.log('Form submission prevented');
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+
+        // Thêm sự kiện bắt lỗi cho form
+        form.addEventListener('error', (e) => {
+          console.log('Form error caught');
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        });
+      });
+
+      // Bắt sự kiện trước khi trang unload để ngăn chặn reload
+      window.addEventListener('beforeunload', function (e) {
+        // Chỉ ngăn chặn khi đang trong quá trình upload
+        const uploading = document.querySelector(
+          '.progress-container[style*="display: block"]',
+        );
+        if (uploading) {
+          e.preventDefault();
+          e.returnValue = '';
+          return '';
+        }
+      });
     </script>
   </body>
 </html>
