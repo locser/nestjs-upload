@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ErrorLoggingModuleModule } from './error-logging/error-logging.module';
 import { FileUploadModule } from './file-upload/file-upload.module';
 import { LoggerModule } from './logger';
 import { LogLevel } from './logger/logger.constants';
@@ -18,8 +19,15 @@ import { LogLevel } from './logger/logger.constants';
     // TypeOrmModule.forRootAsync({ useClass: TypeOrmConfigService }),
     // ExcelsModule,
     FileUploadModule,
+    ErrorLoggingModuleModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // {
+    //   provide: APP_FILTER,
+    //   useClass: AllExceptionsFilter,
+    // },
+  ],
 })
 export class AppModule {}

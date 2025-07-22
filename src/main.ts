@@ -1,3 +1,9 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dotenv = require('dotenv');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fs = require('fs');
+dotenv.config();
+
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'body-parser';
 import * as express from 'express';
@@ -5,6 +11,12 @@ import { NextFunction, Request, Response } from 'express';
 import * as http from 'http';
 import { AppModule } from './app.module';
 import { LoggerService, LogLevel } from './logger';
+
+const envConfig = dotenv.parse(fs.readFileSync('.env'));
+for (const key in envConfig) {
+  const value = envConfig[key];
+  console.log(`${key}=${value}`);
+}
 
 async function bootstrap() {
   // Tạo ứng dụng NestJS với logger tùy chỉnh
