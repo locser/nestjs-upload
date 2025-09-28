@@ -85,9 +85,11 @@ Tech Stack:
 
 - Security breaches có thể phá hủy career
 - Compliance requirements ngày càng nghiêm ngặt
-- Senior dev phải đảm bảo security cho toàn team
+- dev phải đảm bảo security cho toàn team
 
 **Kiến thức cần học:**
+
+<!-- tới đây rồi  -->
 
 ```
 🔒 Authentication & Authorization (3 tuần)
