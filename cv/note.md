@@ -677,3 +677,56 @@
 │ │
 │ Bạn thấy topic nào exciting nhất? Hoặc muốn tôi design chi tiết track nào trước? 🚀 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+Tôi có thể gợi ý một số direction cho Day 8 dựa trên progression tự nhiên từ những ngày trước:
+
+## 🤔 DIRECTION OPTIONS CHO DAY 8
+
+### **Option 1: System Design & Scalability (Classical)**
+
+- **Pro:** Cần thiết cho senior engineer, interview-friendly
+- **Con:** Có thể quá broad, nhiều lý thuyết
+- **Focus:** Database sharding, load balancing, caching strategies
+
+### **Option 2: Production Troubleshooting & Debugging**
+
+- **Pro:** Rất practical, bạn sẽ gặp hàng ngày
+- **Con:** Có thể overlap với performance optimization
+- **Focus:** Distributed tracing, log analysis, incident response
+
+### **Option 3: Advanced Database Patterns**
+
+- **Pro:** Deep dive từ Day 5, rất technical
+- **Con:** Có thể hẹp, chỉ focus database
+- **Focus:** CQRS, event sourcing database design, data consistency patterns
+
+### **Option 4: API Design & Integration Patterns**
+
+- **Pro:** Connects tất cả services từ Day 6-7
+- **Con:** Có thể basic cho level hiện tại
+- **Focus:** GraphQL, API versioning, rate limiting, webhook patterns
+
+### **Option 5: Security & Production Hardening**
+
+- **Pro:** Critical cho production, ít người biết sâu
+- **Con:** Có thể dry nếu không có practical examples
+- **Focus:** Zero-trust, secrets management, security monitoring
+
+## 🎯 TÔI RECOMMEND: **Advanced System Integration & Resilience Patterns**
+
+**Why này hay:**
+
+- **Practical:** Builds on message queues (Day 6) + containers (Day 7)
+- **Real-world:** Những pattern mà Netflix, Uber thực sự dùng
+- **Comprehensive:** Cả architecture lẫn implementation details
+
+**Nội dung sẽ cover:**
+
+- Circuit breaker patterns (với code)
+- Bulkhead isolation
+- Retry strategies & exponential backoff
+- Health check patterns
+- Graceful degradation
+- Service mesh basics (Istio/Envoy)
+
+**Bạn prefer direction nào?** Hoặc có idea khác mà bạn muốn deep dive?
