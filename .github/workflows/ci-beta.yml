@@ -74,7 +74,7 @@ jobs:
           echo "✅ Build completed"
 
       - name: 📤 Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: dist-files
           path: |
@@ -104,7 +104,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.WSL_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.WSL_HOST }} >> ~/.ssh/known_hosts
+
+          # Debug: Check if WSL_HOST exists
+          echo "WSL_HOST: ${{ secrets.WSL_HOST }}"
+
+          # Add host key with port
+          ssh-keyscan -p ${{ secrets.WSL_PORT }} -H ${{ secrets.WSL_HOST }} >> ~/.ssh/known_hosts || true
+
           echo "✅ SSH configured"
 
       - name: 🚀 Deploy to WSL
