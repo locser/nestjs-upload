@@ -5,7 +5,7 @@ on:
     branches: [beta]
   pull_request:
     branches: [beta]
-  workflow_dispatch:  # Cho phép trigger thủ công
+  workflow_dispatch: # Cho phép trigger thủ công
 
 env:
   NODE_VERSION: '20'
@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 📤 Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist-files
 
@@ -120,7 +120,7 @@ jobs:
           ssh -p ${{ secrets.WSL_PORT }} ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }} << 'EOF'
             # Load Node.js environment
             source ~/.bashrc || source ~/.profile || true
-            
+
             cd ~/projects/nestjs-demo
 
             echo "📦 Installing production dependencies..."
