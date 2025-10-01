@@ -1,0 +1,165 @@
+name: CI/CD Pipeline for Beta
+
+on:
+  push:
+    branches: [beta]
+  pull_request:
+    branches: [beta]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Job 1: Testing
+  # test:
+  #   name: 🧪 Run Tests
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - name: 📥 Checkout code
+  #       uses: actions/checkout@v4
+
+  #     - name: 🟢 Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         cache: 'npm'
+
+  #     - name: 📦 Install dependencies
+  #       run: |
+  #         npm ci
+  #         echo "✅ Dependencies installed"
+
+  # - name: 🔍 Run linting
+  #   run: |
+  #     npm run lint
+  #     echo "✅ Linting passed"
+
+  # - name: 🧪 Run unit tests
+  #   run: |
+  #     npm run test
+  #     echo "✅ Unit tests passed"
+
+  # - name: 🔗 Run e2e tests
+  #   run: |
+  #     npm run test:e2e
+  #     echo "✅ E2E tests passed"
+  # env:
+  #   DISCORD_TOKEN =
+  #   DISCORD_DEVELOPMENT_GUILD_ID =
+  #   ERROR_CHANNEL_ID =
+
+  # Job 2: Build
+  build:
+    name: 🏗️ Build Application
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build application
+        run: |
+          npm run build
+          echo "✅ Build completed"
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-files
+          path: |
+            dist/
+            package*.json
+            node_modules/
+          retention-days: 1
+
+  # Job 3: Deploy to WSL
+  deploy:
+    name: 🚀 Deploy to WSL
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/beta' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📤 Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist-files
+
+      - name: 🔐 Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.WSL_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.WSL_HOST }} >> ~/.ssh/known_hosts
+          echo "✅ SSH configured"
+
+      - name: 🚀 Deploy to WSL
+        run: |
+          echo "🚀 Starting deployment to WSL..."
+
+          # Sync files to WSL
+          rsync -avz --delete \
+            -e "ssh -p ${{ secrets.WSL_PORT }}" \
+            ./ ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}:~/projects/nestjs-demo/
+
+          # Run deployment commands on WSL
+          ssh -p ${{ secrets.WSL_PORT }} ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }} << 'EOF'
+            cd ~/projects/nestjs-demo
+
+            echo "📦 Installing production dependencies..."
+            npm ci --omit=dev
+
+            echo "🏗️ Building application..."
+            npm run build
+
+            echo "🔄 Restarting application with PM2..."
+            pm2 stop nestjs-demo || true
+            pm2 start dist/main.js --name nestjs-demo --env production
+            pm2 save
+
+            echo "✅ Deployment completed!"
+          EOF
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_DEVELOPMENT_GUILD_ID: ${{ secrets.DISCORD_DEVELOPMENT_GUILD_ID }}
+          ERROR_CHANNEL_ID: ${{ secrets.ERROR_CHANNEL_ID }}
+
+      - name: 🏥 Health Check
+        run: |
+          echo "⏳ Waiting for application to start..."
+          sleep 15
+
+          echo "🏥 Performing health check..."
+          for i in {1..5}; do
+            if curl -s -f "http://${{ secrets.WSL_HOST }}:3000/health" >/dev/null; then
+              echo "✅ Health check passed!"
+              exit 0
+            fi
+            echo "⏳ Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+
+          echo "❌ Health check failed after 5 attempts"
+          exit 1
+
+      - name: 🔔 Notify Success
+        if: success()
+        run: |
+          echo "🎉 Deployment to WSL Beta Environment Successful!"
+          echo "🌐 Application URL: http://${{ secrets.WSL_HOST }}:3000"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Author: ${{ github.actor }}"
