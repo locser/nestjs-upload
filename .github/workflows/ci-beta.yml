@@ -5,6 +5,7 @@ on:
     branches: [beta]
   pull_request:
     branches: [beta]
+  workflow_dispatch:  # Cho phép trigger thủ công
 
 env:
   NODE_VERSION: '20'
@@ -73,7 +74,7 @@ jobs:
           echo "✅ Build completed"
 
       - name: 📤 Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist-files
           path: |
@@ -117,6 +118,9 @@ jobs:
 
           # Run deployment commands on WSL
           ssh -p ${{ secrets.WSL_PORT }} ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }} << 'EOF'
+            # Load Node.js environment
+            source ~/.bashrc || source ~/.profile || true
+            
             cd ~/projects/nestjs-demo
 
             echo "📦 Installing production dependencies..."
