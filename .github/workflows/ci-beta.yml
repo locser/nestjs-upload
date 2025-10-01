@@ -113,23 +113,58 @@ jobs:
 
           echo "✅ SSH configured"
 
+      - name: ✅ Validate Secrets
+        run: |
+          echo "🔍 Validating required secrets..."
+          
+          if [ -z "${{ secrets.WSL_USER }}" ]; then
+            echo "❌ Error: WSL_USER secret is not set"
+            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: WSL_USER, Value: your-wsl-username"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.WSL_HOST }}" ]; then
+            echo "❌ Error: WSL_HOST secret is not set"
+            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: WSL_HOST, Value: your-wsl-ip-address"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.WSL_PORT }}" ]; then
+            echo "❌ Error: WSL_PORT secret is not set"
+            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: WSL_PORT, Value: 22 (or your SSH port)"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ Error: WSL_SSH_PRIVATE_KEY secret is not set"
+            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
+            echo "Name: WSL_SSH_PRIVATE_KEY, Value: your-private-ssh-key-content"
+            exit 1
+          fi
+          
+          echo "✅ All required secrets are configured"
+
       - name: 🚀 Deploy to WSL
         run: |
           echo "🚀 Starting deployment to WSL..."
-          
-          # Debug: Print connection details (excluding sensitive data)
           echo "Connecting to: ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}:${{ secrets.WSL_PORT }}"
           
           # Test SSH connection first
+          echo "🔍 Testing SSH connection..."
           ssh -p "${{ secrets.WSL_PORT }}" -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
             "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" "echo 'SSH connection successful'"
 
           # Sync files to WSL
+          echo "📁 Syncing files..."
           rsync -avz --delete \
             -e "ssh -p ${{ secrets.WSL_PORT }} -o StrictHostKeyChecking=no" \
             ./ "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}:~/projects/nestjs-demo/"
 
           # Run deployment commands on WSL
+          echo "🔧 Running deployment commands..."
           ssh -p "${{ secrets.WSL_PORT }}" -o StrictHostKeyChecking=no \
             "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" << 'EOF'
             # Load Node.js environment
