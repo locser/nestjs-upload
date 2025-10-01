@@ -74,7 +74,7 @@ jobs:
           echo "✅ Build completed"
 
       - name: 📤 Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist-files
           path: |
