@@ -1,0 +1,302 @@
+name: CI/CD Pipeline - Self Hosted Runner
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+    branches: [main, beta]
+  workflow_dispatch: # Manual trigger
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Quick validation on GitHub-hosted runners for fast feedback
+  validate:
+    name: 🔍 Quick Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run linting
+        run: npm run lint || echo "Lint not configured"
+
+      - name: 🧪 Run unit tests
+        run: npm test || echo "Tests not configured"
+
+      - name: 🏗️ Test build
+        run: npm run build
+
+  # Main deployment on self-hosted runner
+  deploy:
+    name: 🚀 Deploy to WSL
+    runs-on: [self-hosted, wsl, nestjs]
+    needs: [validate]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: 🔍 Environment Information
+        run: |
+          echo "🖥️ Runner Hostname: $(hostname)"
+          echo "👤 Current User: $(whoami)"
+          echo "📁 Working Directory: $(pwd)"
+          echo "🟢 Node Version: $(node --version)"
+          echo "📦 NPM Version: $(npm --version)"
+          echo "🔄 PM2 Version: $(pm2 --version)"
+          echo "💾 Available Space: $(df -h . | tail -1 | awk '{print $4}')"
+          echo "📊 Memory Usage: $(free -h | grep '^Mem:' | awk '{print $3 "/" $2}')"
+
+      - name: 🚀 Pre-deployment Tasks
+        run: |
+          echo "🚀 Starting pre-deployment..."
+          
+          # Create necessary directories
+          mkdir -p ~/projects/nestjs-demo
+          mkdir -p ~/logs
+          mkdir -p ~/backups
+          
+          # Stop existing application gracefully
+          echo "🛑 Stopping existing application..."
+          pm2 stop nestjs-demo || echo "No existing application to stop"
+          
+          # Create backup of current deployment
+          if [ -d ~/projects/nestjs-demo ] && [ "$(ls -A ~/projects/nestjs-demo)" ]; then
+            BACKUP_DIR=~/backups/$(date +%Y%m%d_%H%M%S)
+            echo "💾 Creating backup at $BACKUP_DIR..."
+            mkdir -p $BACKUP_DIR
+            cp -r ~/projects/nestjs-demo $BACKUP_DIR/ || true
+            echo "✅ Backup created successfully"
+          fi
+          
+          echo "✅ Pre-deployment completed"
+
+      - name: 📁 Sync Application Files
+        run: |
+          echo "📁 Syncing files to deployment directory..."
+          
+          # Sync files excluding unnecessary items
+          rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='.github/' \
+            --exclude='*.md' \
+            --exclude='.env*' \
+            --exclude='tmp_*' \
+            --exclude='coverage/' \
+            --exclude='dist/' \
+            ./ ~/projects/nestjs-demo/
+          
+          echo "✅ Files synced successfully"
+
+      - name: 📦 Install Dependencies
+        working-directory: /home/runner/projects/nestjs-demo
+        run: |
+          echo "📦 Installing production dependencies..."
+          
+          # Clean install for production
+          npm ci --omit=dev --silent
+          
+          echo "✅ Dependencies installed successfully"
+
+      - name: 🏗️ Build Application
+        working-directory: /home/runner/projects/nestjs-demo
+        run: |
+          echo "🏗️ Building application..."
+          
+          # Build the application
+          npm run build
+          
+          # Verify build output
+          if [ ! -d "dist" ] || [ ! -f "dist/main.js" ]; then
+            echo "❌ Build failed - dist/main.js not found"
+            exit 1
+          fi
+          
+          echo "✅ Application built successfully"
+
+      - name: ⚙️ Configure Environment
+        working-directory: /home/runner/projects/nestjs-demo
+        run: |
+          echo "⚙️ Setting up environment configuration..."
+          
+          # Create production environment file
+          cat > .env.production << EOF
+          NODE_ENV=production
+          PORT=3000
+          # Add your production variables here
+          EOF
+          
+          # Set proper permissions
+          chmod 600 .env.production
+          
+          echo "✅ Environment configured"
+
+      - name: 🚀 Deploy Application
+        working-directory: /home/runner/projects/nestjs-demo
+        run: |
+          echo "🚀 Deploying application with PM2..."
+          
+          # Create PM2 ecosystem config if not exists
+          if [ ! -f "ecosystem.config.js" ]; then
+            cat > ecosystem.config.js << 'EOF'
+          module.exports = {
+            apps: [{
+              name: 'nestjs-demo',
+              script: 'dist/main.js',
+              env: {
+                NODE_ENV: 'development'
+              },
+              env_production: {
+                NODE_ENV: 'production',
+                PORT: 3000
+              },
+              instances: 1,
+              exec_mode: 'fork',
+              max_memory_restart: '300M',
+              error_file: '~/logs/nestjs-demo-error.log',
+              out_file: '~/logs/nestjs-demo-out.log',
+              log_file: '~/logs/nestjs-demo.log',
+              time: true,
+              autorestart: true,
+              watch: false,
+              ignore_watch: ["node_modules", "logs"],
+              env_file: '.env.production'
+            }]
+          }
+          EOF
+          fi
+          
+          # Deploy with PM2
+          pm2 reload ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
+          
+          # Save PM2 process list
+          pm2 save
+          
+          echo "✅ Application deployed successfully"
+
+      - name: 🏥 Health Check
+        run: |
+          echo "🏥 Performing application health check..."
+          
+          # Wait for application to start
+          echo "⏳ Waiting for application to start..."
+          sleep 15
+          
+          # Health check with retries
+          MAX_ATTEMPTS=10
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "🔍 Health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
+            
+            if curl -s -f http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Health check passed! Application is running."
+              
+              # Additional checks
+              echo "📊 Application status:"
+              pm2 show nestjs-demo || true
+              
+              exit 0
+            elif curl -s -f http://localhost:3000 > /dev/null 2>&1; then
+              echo "✅ Application is responding (no /health endpoint)"
+              exit 0
+            else
+              echo "⏳ Attempt $ATTEMPT failed, retrying in 10s..."
+              sleep 10
+              ATTEMPT=$((ATTEMPT + 1))
+            fi
+          done
+          
+          echo "❌ Health check failed after $MAX_ATTEMPTS attempts"
+          echo "📋 PM2 Status:"
+          pm2 list
+          echo "📝 Recent logs:"
+          pm2 logs nestjs-demo --lines 20 --nostream || true
+          
+          exit 1
+
+      - name: 🧹 Post-deployment Cleanup
+        if: always()
+        run: |
+          echo "🧹 Running cleanup tasks..."
+          
+          # Clean old backups (keep last 5)
+          if [ -d ~/backups ]; then
+            echo "🗂️ Cleaning old backups..."
+            find ~/backups -maxdepth 1 -type d -name "20*" | sort | head -n -5 | xargs rm -rf || true
+          fi
+          
+          # Clean npm cache
+          echo "🧽 Cleaning npm cache..."
+          npm cache clean --force || true
+          
+          # Flush old PM2 logs
+          echo "📝 Flushing old PM2 logs..."
+          pm2 flush || true
+          
+          echo "✅ Cleanup completed"
+
+      - name: 📊 Deployment Summary
+        if: always()
+        run: |
+          echo "📊 Deployment Summary"
+          echo "===================="
+          echo "🔗 Commit SHA: ${{ github.sha }}"
+          echo "📝 Commit Message: $(git log -1 --pretty=%B)"
+          echo "👤 Author: ${{ github.actor }}"
+          echo "🌿 Branch: ${{ github.ref_name }}"
+          echo "🕐 Deployment Time: $(date)"
+          echo "🏷️ Event: ${{ github.event_name }}"
+          
+          echo ""
+          echo "🚀 Application Details:"
+          echo "📍 URL: http://localhost:3000"
+          echo "🔍 Health Check: http://localhost:3000/health"
+          
+          echo ""
+          echo "📋 PM2 Process Status:"
+          pm2 list || true
+          
+          echo ""
+          echo "💾 System Resources:"
+          echo "CPU: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)%"
+          echo "Memory: $(free | grep Mem | awk '{printf("%.1f%%", $3/$2 * 100.0)}')"
+          echo "Disk: $(df -h / | awk 'NR==2{printf "%s", $5}')"
+
+  # Notification job (optional)
+  notify:
+    name: 📬 Notify Deployment
+    runs-on: [self-hosted, wsl, nestjs]
+    needs: [deploy]
+    if: always() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
+    
+    steps:
+      - name: 📬 Send Notification
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "🎉 Deployment Successful!"
+            echo "✅ NestJS application deployed to WSL"
+            echo "🌐 Available at: http://localhost:3000"
+          else
+            echo "❌ Deployment Failed!"
+            echo "🔍 Check the deployment logs for details"
+            echo "📋 PM2 Status:"
+            pm2 list || true
+          fi

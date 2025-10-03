@@ -64,16 +64,46 @@ jobs:
       - name: 🔐 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.WSL_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          
+          # Setup SSH key if available
+          if [ -n "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ]; then
+            echo "${{ secrets.WSL_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            echo "✅ SSH Key configured"
+          else
+            echo "⚠️ No SSH key found, will use password authentication"
+          fi
 
-          # Debug: Check if WSL_HOST exists
+          # Debug: Check connection details
           echo "WSL_HOST: ${{ secrets.WSL_HOST }}"
+          echo "WSL_PORT: ${{ secrets.WSL_PORT }}"
+          echo "WSL_USER: ${{ secrets.WSL_USER }}"
 
           # Add host key with port
-          ssh-keyscan -p ${{ secrets.WSL_PORT }} -H ${{ secrets.WSL_HOST }} >> ~/.ssh/known_hosts || true
+          ssh-keyscan -p ${{ secrets.WSL_PORT }} -H ${{ secrets.WSL_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          echo "✅ SSH configured"
+          # Install sshpass for password authentication
+          sudo apt-get update && sudo apt-get install -y sshpass
+
+          echo "✅ SSH environment configured"
+
+      - name: 🔍 Connection Troubleshooting
+        run: |
+          echo "🔍 Running connection diagnostics..."
+          
+          # Test basic connectivity
+          echo "Testing connectivity to ${{ secrets.WSL_HOST }}:${{ secrets.WSL_PORT }}..."
+          timeout 10 bash -c "</dev/tcp/${{ secrets.WSL_HOST }}/${{ secrets.WSL_PORT }}" && echo "✅ Port is reachable" || echo "❌ Port is not reachable"
+          
+          # Try to ping the host
+          echo "Pinging host..."
+          ping -c 3 "${{ secrets.WSL_HOST }}" || echo "❌ Ping failed"
+          
+          # Test with telnet
+          echo "Testing with telnet..."
+          timeout 5 telnet "${{ secrets.WSL_HOST }}" "${{ secrets.WSL_PORT }}" || echo "❌ Telnet connection failed"
+          
+          echo "🔍 Diagnostics completed"
 
       - name: ✅ Validate Secrets
         run: |
@@ -100,11 +130,20 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ]; then
-            echo "❌ Error: WSL_SSH_PRIVATE_KEY secret is not set"
-            echo "Go to Settings → Secrets and variables → Actions → New repository secret"
-            echo "Name: WSL_SSH_PRIVATE_KEY, Value: your-private-ssh-key-content"
+          # Check authentication method
+          if [ -z "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ] && [ -z "${{ secrets.WSL_PASSWORD }}" ]; then
+            echo "❌ Error: Either WSL_SSH_PRIVATE_KEY or WSL_PASSWORD must be set"
+            echo "For SSH Key authentication:"
+            echo "  Name: WSL_SSH_PRIVATE_KEY, Value: your-private-ssh-key-content"
+            echo "For Password authentication:"
+            echo "  Name: WSL_PASSWORD, Value: your-ssh-password"
             exit 1
+          fi
+
+          if [ -n "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ]; then
+            echo "✅ Using SSH Key authentication"
+          elif [ -n "${{ secrets.WSL_PASSWORD }}" ]; then
+            echo "✅ Using Password authentication"
           fi
 
           echo "✅ All required secrets are configured"
@@ -114,21 +153,34 @@ jobs:
           echo "🚀 Starting deployment to WSL..."
           echo "Connecting to: ${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}:${{ secrets.WSL_PORT }}"
 
+          # Determine authentication method and set SSH command
+          if [ -n "${{ secrets.WSL_SSH_PRIVATE_KEY }}" ]; then
+            echo "🔑 Using SSH Key authentication"
+            SSH_CMD="ssh -p ${{ secrets.WSL_PORT }} -o ConnectTimeout=30 -o StrictHostKeyChecking=no"
+            RSYNC_SSH="ssh -p ${{ secrets.WSL_PORT }} -o StrictHostKeyChecking=no"
+          elif [ -n "${{ secrets.WSL_PASSWORD }}" ]; then
+            echo "🔒 Using Password authentication"
+            export SSHPASS="${{ secrets.WSL_PASSWORD }}"
+            SSH_CMD="sshpass -e ssh -p ${{ secrets.WSL_PORT }} -o ConnectTimeout=30 -o StrictHostKeyChecking=no"
+            RSYNC_SSH="sshpass -e ssh -p ${{ secrets.WSL_PORT }} -o StrictHostKeyChecking=no"
+          else
+            echo "❌ No authentication method available"
+            exit 1
+          fi
+
           # Test SSH connection first
           echo "🔍 Testing SSH connection..."
-          ssh -p "${{ secrets.WSL_PORT }}" -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
-            "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" "echo 'SSH connection successful'"
+          $SSH_CMD "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" "echo 'SSH connection successful'"
 
           # Sync files to WSL
           echo "📁 Syncing files..."
           rsync -avz --delete \
-            -e "ssh -p ${{ secrets.WSL_PORT }} -o StrictHostKeyChecking=no" \
+            -e "$RSYNC_SSH" \
             ./ "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}:~/projects/nestjs-demo/"
 
           # Run deployment commands on WSL
           echo "🔧 Running deployment commands..."
-          ssh -p "${{ secrets.WSL_PORT }}" -o StrictHostKeyChecking=no \
-            "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" << 'EOF'
+          $SSH_CMD "${{ secrets.WSL_USER }}@${{ secrets.WSL_HOST }}" << 'EOF'
             # Load Node.js environment
             source ~/.bashrc || source ~/.profile || true
 
